@@ -24,4 +24,10 @@ The training is pretty memory demanding.
 
 I have still to improve some optimization at the code to speed it up.
 
+Authors:
+Alessandro Ferrari - alessandroferrari87@gmail.com
+
+Licensing:
+gpl 3.0
+
 Enjoy.
