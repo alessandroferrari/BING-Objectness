@@ -1,0 +1,8 @@
+{
+	"basepath": "/opt/Datasets/VOC2007",
+	"training_set_fn": "/opt/Datasets/VOC2007/ImageSets/Main/train.txt",
+	"test_set_fn": "/opt/Datasets/VOC2007/ImageSets/Main/test.txt",
+	"annotations_path": "/opt/Datasets/VOC2007/Annotations",
+	"images_path": "/opt/Datasets/VOC2007/JPEGImages",
+	"results_dir": "/opt/Datasets/VOC2007/BING_Results"
+}
