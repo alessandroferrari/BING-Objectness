@@ -90,7 +90,8 @@ def fit_svm_sklearn_liblinear_with_cv(C, X_train, X_test, y_train, y_test):
         
     X_train, y_train, X_test, y_test = dtype_ensure(X_train, y_train, X_test, y_test)
             
-    clf = LinearSVC(C=C, dual=False,penalty='l1',loss='l2', class_weight='auto')
+    #clf = LinearSVC(C=C, dual=False,penalty='l1',loss='l2', class_weight='auto')
+    clf = LinearSVC(C=C, dual=False,penalty='l1',loss='l2')
     clf.fit(X_train, y_train)
     
     y_pred = clf.predict(X_test)
@@ -114,17 +115,18 @@ def fit_svm_with_cv(C, X_train, X_test, y_train, y_test, wrapper_type = CUSTOM_L
 
 def fit_svm_sklearn_liblinear(X, y, C = 1.0):
     
-    clf = LinearSVC(C=C, dual=False,penalty='l1',loss='l2', class_weight='auto')
+    #clf = LinearSVC(C=C, dual=False,penalty='l1',loss='l2', class_weight='auto')
+    clf = LinearSVC(C=C, dual=False,penalty='l1',loss='l2')
     clf.fit(X, y)
     weights = clf.coef_
     bias = clf.intercept_
     
-    return weights, bias
+    return weights.astype(np.float32), bias.astype(np.float32)
 
 
 def fit_svm_custom_wrapper_liblinear(X, y, C = 1.0):
     
-    p = Prova()
+    p = PyLibLinear()
     w = p.trainSVM(X,y,L1R_L2LOSS_SVC,C,1.0,0.01)
     weights = w[0,:-1].ravel()
     bias = w[0,-1]

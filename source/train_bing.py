@@ -13,48 +13,15 @@ import numpy as np
 from threading import Lock
 from dataset import Dataset
 from multiprocessing import cpu_count
+from test_recall import EvaluateRecall
 from multiprocessing.dummy import Pool as ThreadsPool
+from common import bounding_box_overlapping, bounding_box_overlap_on_ground_truths
 from bing import get_features, EDGE, BASE_LOG, MIN_EDGE_LOG, MAX_EDGE_LOG, EDGE_LOG_RANGE, FirstStagePrediction, NUM_WIN_PSZ
 from svm_container import fit_svm, shuffle_dataset, model_selection, CUSTOM_LIBLINEAR_WRAPPER, SKLEARN_LIBLINEAR_WRAPPER
 
 NUM_NEGATIVE_BOUNDING_BOXES = 100
 POSITIVE_BB = 1
 NEGATIVE_BB = -1
-
-#determine the overlapping among two bounding boxes
-def bounding_box_overlapping(bb1, bb2):
-        
-        x0_1, y0_1, x1_1, y1_1 = bb1
-        w_1 = x1_1 - x0_1 + 1
-        h_1 = y1_1 - y0_1 + 1
-        x0_2, y0_2, x1_2, y1_2 = bb2
-        w_2 = x1_2 - x0_2 + 1
-        h_2 = y1_2 - y0_2 + 1
-        x0 = max(x0_1,x0_2)
-        x1 = min(x1_1,x1_2)
-        y0 = max(y0_1,y0_2)
-        y1 = min(y1_1,y1_2)
-        xover = x1-x0+1
-        yover = y1-y0+1
-        if xover<=0 or yover<=0:
-            return .0
-        over = float(xover*yover)
-        not_over = w_1*h_1 + w_2 * h_2 - over
-        ratio = over / not_over
-        return ratio
-    
-#determine the overlapping among a query bounding box (bb) and the ground truth 
-#bounding boxes of an image   
-def bounding_box_overlap_on_ground_truths(ground_truth_bbs, bb):
-    
-    max_overlap = 0.0
-    for obj in ground_truth_bbs:
-        gt_bb = obj["bb"]
-        over = bounding_box_overlapping(bb, gt_bb)
-        if over > max_overlap:
-            max_overlap = over
-    return max_overlap
-
 
 class TrainBing(object):
    
@@ -222,9 +189,18 @@ class TrainBing(object):
         
         return X_pos, X_neg
     
-    
+    def pack_positive_negative_features(self, Xp, Xn):
+        
+        len_p = Xp.shape[0]
+        len_n = Xn.shape[0]
+        X = np.vstack((Xp,Xn))
+        y = np.zeros(len_p+len_n)
+        y[:len_p] = 1
+        
+        return X, y
+        
     def training_set_average(self, X, y, repr_edge = 400):
-    	"""Perform an averaging of all the training set, thw whole, the positives and the negatives.
+        """Perform an averaging of all the training set, thw whole, the positives and the negatives.
     	The averaging is normalized so that it has minimum 0 and maximum 255, and it is quantized to np.uint8, for being 
     	visualized as image.
     	A visualization of the dataset is saved if the destination results directory is specified in the constructor.
@@ -294,7 +270,7 @@ class TrainBing(object):
         return new_X, new_y        
         
     
-    def first_stage_training(self, X, y, C_list = None, wrapper_type = SKLEARN_LIBLINEAR_WRAPPER, repr_edge = 400):
+    def first_stage_training(self, X, y, C_list = None, wrapper_type = CUSTOM_LIBLINEAR_WRAPPER, repr_edge = 400):
         
         print "First stage training started..."
         
@@ -304,8 +280,8 @@ class TrainBing(object):
         if self.first_stage_weights.dtype != np.float32:
             self.first_stage_weights = self.first_stage_weights.astype(np.float32)
         
-    	#if a results directory specified, a image representation of the weights is saved. For visualizations purposes
-    	#the range is normalized within 0 and 255, and the values are quantized to uint8.
+        #if a results directory specified, a image representation of the weights is saved. For visualizations purposes
+        #the range is normalized within 0 and 255, and the values are quantized to uint8.
         if not self.results_dir is None:
             if not os.path.exists(self.results_dir):
                 raise Exception("The destination path %s suggested to save the first stage learning weights does not exist!"%self.results_dir)
@@ -324,7 +300,7 @@ class TrainBing(object):
         
         return weights, bias
     
-    def second_stage_training(self, wrapper_type = SKLEARN_LIBLINEAR_WRAPPER):
+    def second_stage_training(self, wrapper_type = CUSTOM_LIBLINEAR_WRAPPER):
         
         print "Starting second stage training."
         fstp = FirstStagePrediction(self.first_stage_weights, self.scale_space_sizes, edge = self.gradient_edge, base_log = self.base_log, min_edge_log = self.min_edge_log, edge_log_range = self.edge_log_range, num_win_psz = NUM_WIN_PSZ)
@@ -352,7 +328,7 @@ class TrainBing(object):
             ground_truth_bbs_objs = ann_dict["bbs"]
             predictions = fstp.predict(img, nss = 2)
             for pred_bbs, score, size in predictions:
-                y = 1 if bounding_box_overlap_on_ground_truths(ground_truth_bbs_objs, pred_bbs) > 0.5 else 0
+                y = 1 if bounding_box_overlap_on_ground_truths(ground_truth_bbs_objs, pred_bbs) > 0.5 else -1
                 sizes_dict["%s"%size][SCORE].append(score)
                 sizes_dict["%s"%size][LABEL].append(y)
         
@@ -365,12 +341,16 @@ class TrainBing(object):
             #features array is 1-D, the only feature is the first-stage bounding-box detection score
             train = np.reshape(np.array(item[SCORE]),(-1,1))
             labels = np.array(item[LABEL])
-            print "Size %s: number training samples %s, number positive samples %s."%(size_key, train.shape[0], np.sum(labels))
+            #really weird thing, liblinear takes as positive label the first labels it encounters
+            Xp, Xn = self.split_positive_and_negative_features(train, labels)
+            train, labels = self.pack_positive_negative_features(Xp, Xn)
+            num_pos = np.sum((labels==1).astype(int))
+            print "Size %s: number training samples %s, number positive samples %s."%(size_key, train.shape[0], num_pos)
             if train.shape[0]==0:
                 to_delete.append(size_key)
                 print "Training set for size %s is missing. Skip this size." % size_key
                 continue
-            weight, bias = fit_svm(train, labels, C = 100, wrapper_type = SKLEARN_LIBLINEAR_WRAPPER)
+            weight, bias = fit_svm(train, labels, C = 100, wrapper_type = wrapper_type)
             #weight is 1 element array!
             sizes_dict[size_key]["weight"] = float(weight[0])
             sizes_dict[size_key]["bias"] = float(bias)
@@ -408,6 +388,8 @@ def parse_cmdline_inputs():
         "annotations_path": "/opt/Datasets/VOC2007/Annotations",
         "images_path": "/opt/Datasets/VOC2007/JPEGImages",
         "results_dir": "/opt/Datasets/VOC2007/BING_Results"
+        "num_win_psz": 130
+        "num_bbs": 1500
     }
     """
     if len(sys.argv) != 2:
@@ -430,6 +412,11 @@ def parse_cmdline_inputs():
         print "Error while parsing parameters json file %s. Exception: %s."%(params_file,e)
         sys.exit(2)
     
+    if not params.has_key("num_win_psz"):
+        params["num_win_psz"] = 130
+    if not params.has_key("num_bbs"):
+        params["num_bbs"] = 1500
+    
     return params    
     
 if __name__=='__main__':
@@ -437,7 +424,6 @@ if __name__=='__main__':
     params = parse_cmdline_inputs()
     basepath = params["basepath"]
     training_set_fn = params["training_set_fn"]
-    print training_set_fn
     test_set_fn = params["test_set_fn"]
     annotations_path = params["annotations_path"]
     images_path = params["images_path"]
@@ -447,9 +433,19 @@ if __name__=='__main__':
     
     ds = Dataset(basepath = basepath, training_set_fn = training_set_fn, test_set_fn = test_set_fn, annotations_path = annotations_path, images_path = images_path)
     annotations = ds.load_annotations( mode = Dataset.TRAINING )
-    tb = TrainBing(results_dir = results_dir)
+    tb = TrainBing(results_dir = results_dir, num_negatives_bbs_for_image = 50)
     X,y, sizes=tb.build_dataset(annotations)
     X, y = tb.reduce_dataset(X, y, nr = 100000)
-    weights, bias = tb.first_stage_training(X,y,C_list=[10])
+    weights, bias = tb.first_stage_training(X,y,C_list=[10],wrapper_type = SKLEARN_LIBLINEAR_WRAPPER)
     tb.training_set_average(X, y)
-    sizes_dict, coeffs = tb.second_stage_training()
+    w_2nd_dict, coeffs = tb.second_stage_training(wrapper_type = SKLEARN_LIBLINEAR_WRAPPER)
+    
+    test_annotations = ds.load_annotations( mode = Dataset.TEST )
+    eval_recall = EvaluateRecall(w_1st = weights, sizes_idx = sizes, 
+                                 w_2nd = w_2nd_dict, 
+                                 num_bbs_per_size_1st_stage = params["num_win_psz"], 
+                                 num_bbs_final = params["num_bbs"])
+    recall = eval_recall.evaluate_test_set(test_annotations)
+    print "Recall obetained with {0} windows per size index and {1} total final windows: {2:.5f}".format(params["num_win_psz"],params["num_bbs"],recall)
+    
+    

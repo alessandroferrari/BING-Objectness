@@ -151,7 +151,9 @@ class Bing(object):
         bbs_1st = self.first_stage_prediction.predict(image)
         bbs = self.second_stage_prediction.predict(bbs_1st)
         sorted_bbs = sorted(bbs, key = lambda x:x[0], reverse = True)
-        return sorted_bbs[:self.num_bbs_final]
+        results = [(bb[0],bb[1]) for bb in sorted_bbs[:self.num_bbs_final]]
+        score_bbs, results_bbs = zip(*results)
+        return results_bbs, score_bbs
 
 def parse_cmdline_inputs():
     """
@@ -163,7 +165,9 @@ def parse_cmdline_inputs():
         "test_set_fn": "/opt/Datasets/VOC2007/ImageSets/Main/test.txt",
         "annotations_path": "/opt/Datasets/VOC2007/Annotations",
         "images_path": "/opt/Datasets/VOC2007/JPEGImages",
-        "results_dir": "/opt/Datasets/VOC2007/BING_Results"
+        "results_dir": "/opt/Datasets/VOC2007/BING_Results",
+        "num_win_psz": 130,
+        "num_bbs": 1500
     }
     """
     
@@ -218,11 +222,11 @@ def parse_cmdline_inputs():
     if not params.has_key("num_win_psz"):
         params["num_win_psz"] = 130
                 
-    image_file = sys.argv[-1]
-    if not os.path.exists(image_file):
-        print "Specified file for image %s does not exist."%image_file
+    params["image_file"] = sys.argv[-1]
+    if not os.path.exists(params["image_file"]):
+        print "Specified file for image %s does not exist."%params["image_file"]
         sys.exit(2)
-    image = cv2.imread(image_file)
+    image = cv2.imread(params["image_file"])
     
     return params, image
 
@@ -253,10 +257,15 @@ if __name__=="__main__":
     w_2nd = json.loads(w_str)
     
     b = Bing(w_1st,sizes,w_2nd, num_bbs_per_size_1st_stage= params["num_win_psz"], num_bbs_final = params["num_bbs"])
-    bbs = b.predict(image)
+    bbs, scores = b.predict(image)
     
     for bb in bbs:
-        score, bb = bb
         cv2.rectangle(image,(bb[0],bb[1]),(bb[2],bb[3]),color=(255,0,0))
     
     cv2.imwrite(os.path.join(results_dir, "bounding_box_image.png"), image)
+    
+    f = open(os.path.join(results_dir,"bbs.csv"),"w")
+    f.write("filename,xmin,ymin,xmax,ymax\n")
+    for bb in bbs:
+        f.write("%s,%s,%s,%s,%s\n"%(params["image_file"],bb[0],bb[1],bb[2],bb[3]))
+    f.close()
