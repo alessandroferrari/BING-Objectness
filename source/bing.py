@@ -8,6 +8,7 @@ import cv2
 import sys
 import json
 import getopt
+import random
 import numpy as np
 from filter_tig import FilterTIG
 
@@ -260,7 +261,7 @@ if __name__=="__main__":
     bbs, scores = b.predict(image)
     
     for bb in bbs:
-        cv2.rectangle(image,(bb[0],bb[1]),(bb[2],bb[3]),color=(255,0,0))
+        cv2.rectangle(image,(bb[0],bb[1]),(bb[2],bb[3]),color=(random.randint(0,255),random.randint(0,255),random.randint(0,255)))
     
     cv2.imwrite(os.path.join(results_dir, "bounding_box_image.png"), image)
     
