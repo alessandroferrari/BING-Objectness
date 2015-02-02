@@ -4,5 +4,10 @@
 	"test_set_fn": "/opt/Datasets/VOC2007/ImageSets/Main/test.txt",
 	"annotations_path": "/opt/Datasets/VOC2007/Annotations",
 	"images_path": "/opt/Datasets/VOC2007/JPEGImages",
-	"results_dir": "/opt/Datasets/VOC2007/BING_Results"
+	"results_dir": "/opt/Datasets/VOC2007/BING_Results",
+    "1st_stage_weights_fn":"/home/user/workspace/BING-Objectness/doc/weights.txt",
+    "2nd_stage_weights_fn": "/home/user/workspace/BING-Objectness/doc/2nd_stage_weights.json",
+    "sizes_indeces_fn": "/home/user/workspace/BING-Objectness/doc/sizes.txt",
+	"num_win_psz": 180,
+	"num_bbs":2000
 }

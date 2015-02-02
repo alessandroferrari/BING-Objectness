@@ -134,7 +134,7 @@ class TrainBing(object):
                     neg_counter = neg_counter + 1
     
     
-    def build_dataset(self, annotations, num_negatives_bbs_for_image = NUM_NEGATIVE_BOUNDING_BOXES, gradient_edge = EDGE ):
+    def build_dataset(self, annotations, num_negatives_bbs_for_image = NUM_NEGATIVE_BOUNDING_BOXES, gradient_edge = EDGE, sizes_fn = None ):
         
         self.pos_sizes_records = []
         self.features = []
@@ -173,7 +173,12 @@ class TrainBing(object):
             print "Saving extracted features to %s."%self.results_dir
             np.savetxt(os.path.join(self.results_dir,"features.txt"),self.features_array,fmt='%d', delimiter=',', newline='\n')
             np.savetxt(os.path.join(self.results_dir,"labels.txt"),self.labels_array,fmt='%d', delimiter=',', newline='\n')
-            np.savetxt(os.path.join(self.results_dir,"sizes.txt"),self.scale_space_sizes,fmt='%d', delimiter=',', newline='\n')
+            
+        if not sizes_fn is None:
+            basedir = os.path.dirname(sizes_fn)
+            if not os.path.exists(basedir):
+                os.makedirs(basedir)
+            np.savetxt(sizes_fn,self.scale_space_sizes,fmt='%d', delimiter=',', newline='\n')
         
         return self.features_array.astype(np.float32), self.labels_array.astype(np.float32), self.scale_space_sizes
     
@@ -270,7 +275,7 @@ class TrainBing(object):
         return new_X, new_y        
         
     
-    def first_stage_training(self, X, y, C_list = None, wrapper_type = CUSTOM_LIBLINEAR_WRAPPER, repr_edge = 400):
+    def first_stage_training(self, X, y, C_list = None, wrapper_type = CUSTOM_LIBLINEAR_WRAPPER, repr_edge = 400, weights_fn = None):
         
         print "First stage training started..."
         
@@ -280,14 +285,18 @@ class TrainBing(object):
         if self.first_stage_weights.dtype != np.float32:
             self.first_stage_weights = self.first_stage_weights.astype(np.float32)
         
+        if not weights_fn is None:
+            basedir = os.path.dirname(weights_fn)
+            if not os.path.exists(basedir):
+                os.makedirs(basedir)
+            np.savetxt(weights_fn, self.first_stage_weights, fmt='%10.5f', delimiter=',', newline='\n')
+        
         #if a results directory specified, a image representation of the weights is saved. For visualizations purposes
         #the range is normalized within 0 and 255, and the values are quantized to uint8.
         if not self.results_dir is None:
             if not os.path.exists(self.results_dir):
                 raise Exception("The destination path %s suggested to save the first stage learning weights does not exist!"%self.results_dir)
-            
-            np.savetxt(os.path.join(self.results_dir, "weights.txt"), self.first_stage_weights, fmt='%10.5f', delimiter=',', newline='\n')
-            
+                        
             repr_weights = np.reshape(self.first_stage_weights,(self.gradient_edge, self.gradient_edge))
             repr_weights = cv2.resize(repr_weights, (repr_edge,repr_edge), interpolation = cv2.INTER_NEAREST)
             repr_min = np.min(repr_weights)
@@ -300,7 +309,7 @@ class TrainBing(object):
         
         return weights, bias
     
-    def second_stage_training(self, wrapper_type = CUSTOM_LIBLINEAR_WRAPPER):
+    def second_stage_training(self, wrapper_type = CUSTOM_LIBLINEAR_WRAPPER, weights_fn = None):
         
         print "Starting second stage training."
         fstp = FirstStagePrediction(self.first_stage_weights, self.scale_space_sizes, edge = self.gradient_edge, base_log = self.base_log, min_edge_log = self.min_edge_log, edge_log_range = self.edge_log_range, num_win_psz = NUM_WIN_PSZ)
@@ -359,11 +368,17 @@ class TrainBing(object):
         for key in to_delete:
             del sizes_dict[key]
     
-        print "Saving second stage learning coefficients to file."
-        sizes_json = json.dumps(sizes_dict, sort_keys=True, indent=4, separators=(',', ': '))
-        f = open(os.path.join(self.results_dir, "2nd_stage_weights.json"),"w")
-        f.write(sizes_json)
-        f.close()
+        if not weights_fn is None:
+            basedir = os.path.dirname(weights_fn)
+            if not os.path.exists(basedir):
+                os.makedirs(basedir)
+            if weights_fn[-5:]!=".json":
+                warnings.warn("The filename for saving second stage weights does not have a json extension!")
+            print "Saving second stage learning coefficients to file."
+            sizes_json = json.dumps(sizes_dict, sort_keys=True, indent=4, separators=(',', ': '))
+            f = open(weights_fn,"w")
+            f.write(sizes_json)
+            f.close()
     
         print "Storing second stage learning coefficients in numpy array."
         num_sizes = len(sizes_dict.keys())
@@ -388,6 +403,9 @@ def parse_cmdline_inputs():
         "annotations_path": "/opt/Datasets/VOC2007/Annotations",
         "images_path": "/opt/Datasets/VOC2007/JPEGImages",
         "results_dir": "/opt/Datasets/VOC2007/BING_Results"
+        "1st_stage_weights_fn":"/opt/Datasets/VOC2007/BING_Results/weights.txt",
+        "2nd_stage_weights_fn": "/opt/Datasets/VOC2007/BING_Results/2nd_stage_weights.json",
+        "sizes_indeces_fn": "/opt/Datasets/VOC2007/BING_Results/sizes.txt",
         "num_win_psz": 130
         "num_bbs": 1500
     }
@@ -434,11 +452,11 @@ if __name__=='__main__':
     ds = Dataset(basepath = basepath, training_set_fn = training_set_fn, test_set_fn = test_set_fn, annotations_path = annotations_path, images_path = images_path)
     annotations = ds.load_annotations( mode = Dataset.TRAINING )
     tb = TrainBing(results_dir = results_dir, num_negatives_bbs_for_image = 50)
-    X,y, sizes=tb.build_dataset(annotations)
+    X,y, sizes=tb.build_dataset(annotations, sizes_fn = params["sizes_indeces_fn"])
     X, y = tb.reduce_dataset(X, y, nr = 100000)
-    weights, bias = tb.first_stage_training(X,y,C_list=[10],wrapper_type = SKLEARN_LIBLINEAR_WRAPPER)
+    weights, bias = tb.first_stage_training(X,y,C_list=[10],wrapper_type = SKLEARN_LIBLINEAR_WRAPPER, weights_fn = params["1st_stage_weights_fn"])
     tb.training_set_average(X, y)
-    w_2nd_dict, coeffs = tb.second_stage_training(wrapper_type = SKLEARN_LIBLINEAR_WRAPPER)
+    w_2nd_dict, coeffs = tb.second_stage_training(wrapper_type = SKLEARN_LIBLINEAR_WRAPPER, weights_fn = params["2nd_stage_weights_fn"])
     
     test_annotations = ds.load_annotations( mode = Dataset.TEST )
     eval_recall = EvaluateRecall(w_1st = weights, sizes_idx = sizes, 

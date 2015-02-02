@@ -167,6 +167,9 @@ def parse_cmdline_inputs():
         "annotations_path": "/opt/Datasets/VOC2007/Annotations",
         "images_path": "/opt/Datasets/VOC2007/JPEGImages",
         "results_dir": "/opt/Datasets/VOC2007/BING_Results",
+        "1st_stage_weights_fn":"/opt/Datasets/VOC2007/BING_Results/weights.txt",
+        "2nd_stage_weights_fn": "/opt/Datasets/VOC2007/BING_Results/2nd_stage_weights.json",
+        "sizes_indeces_fn": "/opt/Datasets/VOC2007/BING_Results/sizes.txt",
         "num_win_psz": 130,
         "num_bbs": 1500
     }
@@ -239,20 +242,20 @@ if __name__=="__main__":
         print "The results directory that should contains weights and sizes indeces does not exist. Be sure to have already performed training. "
         sys.exit(2)
     
-    w_1st_fn = os.path.join(results_dir, "weights.txt")
-    if not os.path.exists(w_1st_fn):
+    if not os.path.exists(params["1st_stage_weights_fn"]):
         print "The weights for the first stage does not exist!"
         sys.exit(2)
-    w_1st = np.genfromtxt(w_1st_fn, delimiter=",").astype(np.float32)
+    w_1st = np.genfromtxt(params["1st_stage_weights_fn"], delimiter=",").astype(np.float32)
     
-    sizes_fn = os.path.join(results_dir, "sizes.txt")
-    if not os.path.exists(sizes_fn):
+    if not os.path.exists(params["sizes_indeces_fn"]):
+        print "The sizes indices file does not exist!"
+        sys.exit(2)
+    sizes = np.genfromtxt(params["sizes_indeces_fn"], delimiter=",").astype(np.int32)
+    
+    if not os.path.exists(params["2nd_stage_weights_fn"]):
         print "The weights for the second stage does not exist!"
         sys.exit(2)
-    sizes = np.genfromtxt(sizes_fn, delimiter=",").astype(np.int32)
-    
-    w_2nd_fn = os.path.join(results_dir, "2nd_stage_weights.json")
-    f = open(w_2nd_fn)
+    f = open(params["2nd_stage_weights_fn"])
     w_str = f.read()
     f.close()
     w_2nd = json.loads(w_str)
