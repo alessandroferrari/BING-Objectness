@@ -8,7 +8,9 @@ For compiling the C++ code wrapped in python, type 'make'.
 
 Add the build folder to the PYTHONPATH for allowing python interpreter to load c++-wrapped libraries.
 
-Training set should be in the Pascal VOC 2007 form: http://pascallin.ecs.soton.ac.uk/challenges/VOC/voc2007/ .
+Training set should be in the Pascal VOC 2007 form: http://pascallin.ecs.soton.ac.uk/challenges/VOC/voc2007/ 
+or at 
+https://web.archive.org/web/20140817180729/http://pascallin.ecs.soton.ac.uk/challenges/VOC/voc2007/.
 
 For adapting input, take as model doc/bing_params.json with your dataset.
 
