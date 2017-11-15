@@ -221,7 +221,10 @@ void parse_command_line(int argc, char **argv, char *input_file_name, char *mode
 
 			case 'w':
 				++param.nr_weight;
-				param.weight_label = (int *) realloc(param.weight_label,sizeof(int)*param.nr_weight);
+                                {
+                                    int *t = (int *) realloc(param.weight_label,sizeof(int)*param.nr_weight);
+                                    if (t) param.weight_label = t;
+                                }
 				param.weight = (double *) realloc(param.weight,sizeof(double)*param.nr_weight);
 				param.weight_label[param.nr_weight-1] = atoi(&argv[i-1][2]);
 				param.weight[param.nr_weight-1] = atof(argv[i]);
