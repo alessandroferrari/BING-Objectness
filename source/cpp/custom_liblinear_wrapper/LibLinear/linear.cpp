@@ -214,6 +214,7 @@ protected:
 };
 
 l2r_l2_svc_fun::l2r_l2_svc_fun(const problem *prob, double *C)
+    :sizeI(0)
 {
 	int l=prob->l;
 
