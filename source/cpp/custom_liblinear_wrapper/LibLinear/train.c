@@ -75,7 +75,8 @@ static char* readline(FILE *input)
 	while(strrchr(line,'\n') == NULL)
 	{
 		max_line_len *= 2;
-		line = (char *) realloc(line,max_line_len);
+                char *t = (char *)realloc(line,max_line_len);
+                if (t) line = t;
 		len = (int) strlen(line);
 		if(fgets(line+len,max_line_len-len,input) == NULL)
 			break;
